@@ -1,0 +1,83 @@
+# 1. Jaringan (VPC & Subnet)
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+  tags = { Name = "vpc-week3" }
+}
+
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_subnet" "sub" {
+  vpc_id     = aws_vpc.main.id
+  cidr_block = "10.0.1.0/24"
+  map_public_ip_on_launch = true
+}
+
+# 1.5 Membuat Route Table (Jalan ke Internet)
+resource "aws_route_table" "rt" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.gw.id
+  }
+}
+
+# 1.6 Menghubungkan Route Table ke Subnet
+resource "aws_route_table_association" "a" {
+  subnet_id      = aws_subnet.sub.id
+  route_table_id = aws_route_table.rt.id
+}
+
+# 2. Security Group (Rule: Allow All IP)
+resource "aws_security_group" "allow_all" {
+  name   = "allow-all-traffic"
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"] # Rule allow all ip
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# 3. Server Ubuntu 24
+resource "aws_instance" "ubuntu_server" {
+  ami           = "ami-07d4c2446de28bf0d" # ID Ubuntu 24 di Jakarta
+  instance_type = "t3.micro"
+  key_name      = "keyzserver"
+  subnet_id     = aws_subnet.sub.id
+  vpc_security_group_ids = [aws_security_group.allow_all.id]
+  tags          = { Name = "Ubuntu-24" }
+}
+
+# 4. Server Debian 11
+resource "aws_instance" "debian_server" {
+  ami           = "ami-00d56cc49804f1be2" # ID Debian 11 di Jakarta
+  instance_type = "t3.micro"
+  key_name      = "keyzserver"
+  subnet_id     = aws_subnet.sub.id
+  vpc_security_group_ids = [aws_security_group.allow_all.id]
+  tags          = { Name = "Debian-11" }
+}
+
+# 5. Block Storage & Attachment
+resource "aws_ebs_volume" "storage_ubuntu" {
+  availability_zone = aws_instance.ubuntu_server.availability_zone
+  size              = 10 # 10 GB
+}
+
+resource "aws_volume_attachment" "attach_u" {
+  device_name = "/dev/sdh"
+  volume_id   = aws_ebs_volume.storage_ubuntu.id
+  instance_id = aws_instance.ubuntu_server.id
+}
